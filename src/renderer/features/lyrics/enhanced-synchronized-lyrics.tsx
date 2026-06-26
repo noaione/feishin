@@ -26,6 +26,7 @@ import { PlayerStatus, PlayerType } from '/@/shared/types/types';
 const mpvPlayer = isElectron() ? window.api.mpvPlayer : null;
 const utils = isElectron() ? window.api.utils : null;
 const mpris = isElectron() && utils?.isLinux() ? window.api.mpris : null;
+const CUE_RENDER_INTERVAL_MS = 33;
 
 export interface EnhancedSynchronizedLyricsProps extends Omit<StructuredSyncedLyric, 'lyrics'> {
     lyrics: SynchronizedLyricsArray;
@@ -123,6 +124,14 @@ function isBackgroundAgent(
     if (!agentId) return false;
     if (agentId.startsWith('__nd_bg__')) return true;
     return agents?.find((agent) => agent.id === agentId)?.role === 'bg';
+}
+
+function isLineActive(line: StructuredLyricCueLine, currentTimeMs: number) {
+    return currentTimeMs >= getLineStart(line) && currentTimeMs <= getLineEnd(line);
+}
+
+function linesOverlap(a: StructuredLyricCueLine, b: StructuredLyricCueLine) {
+    return getLineStart(a) <= getLineEnd(b) && getLineStart(b) <= getLineEnd(a);
 }
 
 function splitCueLine(line: StructuredLyricCueLine): CueSegment[] {
@@ -272,7 +281,7 @@ export const EnhancedSynchronizedLyrics = ({
         [translatedLyrics],
     );
 
-    const activeIndex = useMemo(() => {
+    const latestStartedIndex = useMemo(() => {
         let index = -1;
 
         for (let idx = 0; idx < primaryCueLines.length; idx += 1) {
@@ -284,6 +293,39 @@ export const EnhancedSynchronizedLyrics = ({
 
         return index;
     }, [currentTimeMs, primaryCueLines]);
+
+    const activeIndexes = useMemo(() => {
+        const indexes = primaryCueLines.flatMap((line, idx) =>
+            isLineActive(line, currentTimeMs) ? [idx] : [],
+        );
+
+        if (indexes.length > 0) return indexes;
+        return latestStartedIndex >= 0 ? [latestStartedIndex] : [];
+    }, [currentTimeMs, latestStartedIndex, primaryCueLines]);
+
+    const scrollTargetIndex = activeIndexes[0] ?? -1;
+
+    const getBackgroundHostIndex = useCallback(
+        (backgroundLine: StructuredLyricCueLine) => {
+            const overlappingActiveIndexes = activeIndexes.filter((idx) =>
+                linesOverlap(primaryCueLines[idx], backgroundLine),
+            );
+
+            if (overlappingActiveIndexes.length === 0) return -1;
+
+            return overlappingActiveIndexes.reduce((bestIdx, idx) => {
+                const bestDistance = Math.abs(
+                    getLineStart(primaryCueLines[bestIdx]) - getLineStart(backgroundLine),
+                );
+                const distance = Math.abs(
+                    getLineStart(primaryCueLines[idx]) - getLineStart(backgroundLine),
+                );
+
+                return distance < bestDistance ? idx : bestIdx;
+            });
+        },
+        [activeIndexes, primaryCueLines],
+    );
 
     const handleSeek = useCallback(
         (time: number) => {
@@ -306,6 +348,7 @@ export const EnhancedSynchronizedLyrics = ({
         const effectiveOffsetMs = offsetMs ?? 0;
         const baseTimeMs = timestamp * 1000 + effectiveOffsetMs;
         const basePerformanceTime = performance.now();
+        let lastRenderTime = 0;
 
         if (playbackStatus !== PlayerStatus.PLAYING) {
             setCurrentTimeMs(baseTimeMs);
@@ -313,7 +356,13 @@ export const EnhancedSynchronizedLyrics = ({
         }
 
         const update = () => {
-            setCurrentTimeMs(baseTimeMs + performance.now() - basePerformanceTime);
+            const now = performance.now();
+
+            if (now - lastRenderTime >= CUE_RENDER_INTERVAL_MS) {
+                lastRenderTime = now;
+                setCurrentTimeMs(baseTimeMs + now - basePerformanceTime);
+            }
+
             animationFrame = requestAnimationFrame(update);
         };
 
@@ -355,10 +404,10 @@ export const EnhancedSynchronizedLyrics = ({
     }, []);
 
     useEffect(() => {
-        if (activeIndex < 0 || !followRef.current || userScrollingRef.current) return;
+        if (scrollTargetIndex < 0 || !followRef.current || userScrollingRef.current) return;
 
         const container = containerRef.current;
-        const activeLine = document.getElementById(`enhanced-lyric-${activeIndex}`);
+        const activeLine = document.getElementById(`enhanced-lyric-${scrollTargetIndex}`);
 
         if (!container || !activeLine) return;
 
@@ -371,7 +420,7 @@ export const EnhancedSynchronizedLyrics = ({
         }, 600);
 
         return () => clearTimeout(timer);
-    }, [activeIndex]);
+    }, [scrollTargetIndex]);
 
     const hideScrollbar = () => {
         containerRef.current?.classList.add('hide-scrollbar');
@@ -415,7 +464,7 @@ export const EnhancedSynchronizedLyrics = ({
                 />
             )}
             {primaryCueLines.map((line, idx) => {
-                const isActive = idx === activeIndex;
+                const isActive = activeIndexes.includes(idx);
                 const annotationFontSize = Math.max(12, settings.fontSize * 0.58);
                 const backgroundFontSize = Math.max(12, settings.fontSize * 0.7);
                 const translationCueLine = findAnnotationCueLine(translationLyrics, line);
@@ -426,14 +475,13 @@ export const EnhancedSynchronizedLyrics = ({
                     externalTranslationLines,
                 );
                 const pronunciationText = getAnnotationText(pronunciationLyrics, line.index);
-                const activeBackgroundLines =
-                    isActive && currentTimeMs >= getLineStart(line)
-                        ? backgroundCueLines.filter(
-                              (backgroundLine) =>
-                                  currentTimeMs >= getLineStart(backgroundLine) &&
-                                  currentTimeMs <= getLineEnd(backgroundLine),
-                          )
-                        : [];
+                const activeBackgroundLines = isActive
+                    ? backgroundCueLines.filter(
+                          (backgroundLine) =>
+                              isLineActive(backgroundLine, currentTimeMs) &&
+                              getBackgroundHostIndex(backgroundLine) === idx,
+                      )
+                    : [];
 
                 return (
                     <div
