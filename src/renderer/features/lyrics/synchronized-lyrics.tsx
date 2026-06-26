@@ -1,6 +1,6 @@
 import clsx from 'clsx';
 import isElectron from 'is-electron';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 
 import styles from './synchronized-lyrics.module.css';
 
@@ -13,7 +13,11 @@ import {
     usePlayerStatus,
 } from '/@/renderer/store';
 import { usePlayerTimestamp } from '/@/renderer/store/timestamp.store';
-import { FullLyricsMetadata, SynchronizedLyricsArray } from '/@/shared/types/domain-types';
+import {
+    FullLyricsMetadata,
+    StructuredSyncedLyric,
+    SynchronizedLyricsArray,
+} from '/@/shared/types/domain-types';
 import { PlayerStatus, PlayerType } from '/@/shared/types/types';
 
 const mpvPlayer = isElectron() ? window.api.mpvPlayer : null;
@@ -24,9 +28,12 @@ export interface SynchronizedLyricsProps extends Omit<FullLyricsMetadata, 'lyric
     lyrics: SynchronizedLyricsArray;
     offsetMs?: number;
     romajiLyrics?: null | SynchronizedLyricsArray;
+    pronunciationLyrics?: null | StructuredSyncedLyric;
     settingsKey?: string;
+    showAnnotations?: boolean;
     style?: React.CSSProperties;
     translatedLyrics?: null | string;
+    translationLyrics?: null | StructuredSyncedLyric;
 }
 
 export const SynchronizedLyrics = ({
@@ -34,12 +41,15 @@ export const SynchronizedLyrics = ({
     lyrics,
     name,
     offsetMs,
+    pronunciationLyrics,
     remote,
     romajiLyrics,
     settingsKey = 'default',
+    showAnnotations,
     source,
     style,
     translatedLyrics,
+    translationLyrics,
 }: SynchronizedLyricsProps) => {
     const playbackType = usePlaybackType();
     const lyricsSettings = useLyricsSettings();
@@ -60,6 +70,10 @@ export const SynchronizedLyrics = ({
     const { mediaSeekToTimestamp } = usePlayerActions();
     const status = usePlayerStatus();
     const timestamp = usePlayerTimestamp();
+    const externalTranslatedLines = useMemo(
+        () => translatedLyrics?.split('\n'),
+        [translatedLyrics],
+    );
 
     const effectiveOffsetMs = offsetMs ?? 0;
 
@@ -370,9 +384,9 @@ export const SynchronizedLyrics = ({
                             handleSeek(time / 1000);
                         }
                     }}
-                    romajiText={romajiLyrics?.[idx]?.[1]}
+                    romajiText={showAnnotations ? (pronunciationLyrics?.lyrics[idx]?.[1] ?? romajiLyrics?.[idx]?.[1]) : null}
                     text={text}
-                    translatedText={translatedLyrics?.split('\n')[idx]}
+                    translatedText={showAnnotations ? (translationLyrics?.lyrics[idx]?.[1] ?? externalTranslatedLines?.[idx]) : null}
                 />
             ))}
         </div>

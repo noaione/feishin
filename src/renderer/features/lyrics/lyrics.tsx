@@ -477,8 +477,11 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
                                                 ? (romajiConvertedLyrics as SynchronizedLyricsProps['romajiLyrics'])
                                                 : null
                                         }
+                                        pronunciationLyrics={serverPronunciationLyrics}
                                         settingsKey={settingsKey}
+                                        showAnnotations={showAnnotations}
                                         translatedLyrics={showAnnotations ? translatedLyrics : null}
+                                        translationLyrics={serverTranslationLyrics}
                                     />
                                 ) : (
                                     <UnsynchronizedLyrics
