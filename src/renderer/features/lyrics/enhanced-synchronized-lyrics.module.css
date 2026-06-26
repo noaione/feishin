@@ -68,7 +68,6 @@
     overflow: hidden;
     color: var(--theme-colors-foreground);
     white-space: pre;
-    transition: width 80ms linear;
     will-change: width;
 }
 

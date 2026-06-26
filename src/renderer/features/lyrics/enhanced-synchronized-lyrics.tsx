@@ -26,7 +26,6 @@ import { PlayerStatus, PlayerType } from '/@/shared/types/types';
 const mpvPlayer = isElectron() ? window.api.mpvPlayer : null;
 const utils = isElectron() ? window.api.utils : null;
 const mpris = isElectron() && utils?.isLinux() ? window.api.mpris : null;
-const CUE_RENDER_INTERVAL_MS = 33;
 
 export interface EnhancedSynchronizedLyricsProps extends Omit<StructuredSyncedLyric, 'lyrics'> {
     lyrics: SynchronizedLyricsArray;
@@ -49,6 +48,13 @@ type CueSegment =
           text: string;
           type: 'plain';
       };
+
+type RenderState = {
+    activeIndexes: number[];
+    scrollTargetIndex: number;
+    signature: string;
+    timeMs: number;
+};
 
 const textEncoder = new TextEncoder();
 
@@ -86,6 +92,15 @@ function findAnnotationCueLine(
     return lyric?.cueLine?.find((line) => line.index === mainLine.index);
 }
 
+function getActiveIndexes(lines: StructuredLyricCueLine[], currentTimeMs: number) {
+    const indexes = lines.flatMap((line, idx) => (isLineActive(line, currentTimeMs) ? [idx] : []));
+
+    if (indexes.length > 0) return indexes;
+
+    const latestStartedIndex = getLatestStartedIndex(lines, currentTimeMs);
+    return latestStartedIndex >= 0 ? [latestStartedIndex] : [];
+}
+
 function getAnnotationText(
     lyric: null | StructuredSyncedLyric | undefined,
     lineIndex: number,
@@ -95,10 +110,50 @@ function getAnnotationText(
     return fallbackLines?.[lineIndex];
 }
 
+function getBackgroundHostIndex(
+    backgroundLine: StructuredLyricCueLine,
+    activeIndexes: number[],
+    primaryCueLines: StructuredLyricCueLine[],
+) {
+    const overlappingActiveIndexes = activeIndexes.filter((idx) =>
+        linesOverlap(primaryCueLines[idx], backgroundLine),
+    );
+
+    if (overlappingActiveIndexes.length === 0) return -1;
+
+    return overlappingActiveIndexes.reduce((bestIdx, idx) => {
+        const bestDistance = Math.abs(
+            getLineStart(primaryCueLines[bestIdx]) - getLineStart(backgroundLine),
+        );
+        const distance = Math.abs(
+            getLineStart(primaryCueLines[idx]) - getLineStart(backgroundLine),
+        );
+
+        return distance < bestDistance ? idx : bestIdx;
+    });
+}
+
+function getBackgroundLineKey(line: StructuredLyricCueLine) {
+    return `${line.index}:${line.agentId ?? ''}:${getLineStart(line)}`;
+}
+
 function getCueProgress(cue: StructuredLyricCue, currentTimeMs: number) {
     if (currentTimeMs < cue.start) return 0;
     if (cue.end === undefined || cue.end <= cue.start) return 1;
     return clamp((currentTimeMs - cue.start) / (cue.end - cue.start));
+}
+
+function getLatestStartedIndex(lines: StructuredLyricCueLine[], currentTimeMs: number) {
+    let index = -1;
+
+    for (let idx = 0; idx < lines.length; idx += 1) {
+        if (currentTimeMs < getLineStart(lines[idx])) {
+            break;
+        }
+        index = idx;
+    }
+
+    return index;
 }
 
 function getLineEnd(line: StructuredLyricCueLine) {
@@ -107,6 +162,30 @@ function getLineEnd(line: StructuredLyricCueLine) {
 
 function getLineStart(line: StructuredLyricCueLine) {
     return line.start ?? line.cue[0]?.start ?? 0;
+}
+
+function getRenderState(
+    timeMs: number,
+    primaryCueLines: StructuredLyricCueLine[],
+    backgroundCueLines: StructuredLyricCueLine[],
+): RenderState {
+    const activeIndexes = getActiveIndexes(primaryCueLines, timeMs);
+    const backgroundSignature = backgroundCueLines
+        .flatMap((line) => {
+            if (!isLineActive(line, timeMs)) return [];
+
+            const hostIndex = getBackgroundHostIndex(line, activeIndexes, primaryCueLines);
+            return hostIndex >= 0 ? [`${hostIndex}:${getBackgroundLineKey(line)}`] : [];
+        })
+        .join(',');
+    const signature = `${activeIndexes.join(',')}|${backgroundSignature}`;
+
+    return {
+        activeIndexes,
+        scrollTargetIndex: activeIndexes[0] ?? -1,
+        signature,
+        timeMs,
+    };
 }
 
 function getStringIndex(
@@ -163,6 +242,26 @@ function splitCueLine(line: StructuredLyricCueLine): CueSegment[] {
     return segments;
 }
 
+function updateCueProgressNodes(currentTimeMs: number, nodes: HTMLElement[]) {
+    for (const node of nodes) {
+        const start = Number(node.dataset.cueStart);
+        const end = node.dataset.cueEnd ? Number(node.dataset.cueEnd) : undefined;
+
+        if (!Number.isFinite(start)) continue;
+
+        let progress = currentTimeMs >= start ? 1 : 0;
+
+        if (end !== undefined && Number.isFinite(end)) {
+            progress = getCueProgress(
+                { byteEnd: 0, byteStart: 0, end, start, value: '' },
+                currentTimeMs,
+            );
+        }
+
+        node.style.setProperty('--cue-progress', progress.toString());
+    }
+}
+
 const CueText = ({
     cueOnly,
     currentTimeMs,
@@ -194,6 +293,8 @@ const CueText = ({
                 return (
                     <span
                         className={styles.cueSpan}
+                        data-cue-end={segment.cue.end}
+                        data-cue-start={segment.cue.start}
                         key={`${segment.cue.start}-${segment.cue.byteStart}-${idx}`}
                         style={
                             {
@@ -254,10 +355,12 @@ export const EnhancedSynchronizedLyrics = ({
     const { mediaSeekToTimestamp } = usePlayerActions();
     const playbackStatus = usePlayerStatus();
     const timestamp = usePlayerTimestamp();
-    const [currentTimeMs, setCurrentTimeMs] = useState(timestamp * 1000 + (offsetMs ?? 0));
     const containerRef = useRef<HTMLDivElement | null>(null);
+    const cueProgressNodesRef = useRef<HTMLElement[]>([]);
     const followRef = useRef(settings.follow);
+    const playbackTimeRef = useRef(timestamp * 1000 + (offsetMs ?? 0));
     const programmaticScrollRef = useRef(false);
+    const renderSignatureRef = useRef('');
     const scrollTimeoutRef = useRef<null | ReturnType<typeof setTimeout>>(null);
     const userScrollingRef = useRef(false);
 
@@ -281,51 +384,13 @@ export const EnhancedSynchronizedLyrics = ({
         [translatedLyrics],
     );
 
-    const latestStartedIndex = useMemo(() => {
-        let index = -1;
-
-        for (let idx = 0; idx < primaryCueLines.length; idx += 1) {
-            if (currentTimeMs < getLineStart(primaryCueLines[idx])) {
-                break;
-            }
-            index = idx;
-        }
-
-        return index;
-    }, [currentTimeMs, primaryCueLines]);
-
-    const activeIndexes = useMemo(() => {
-        const indexes = primaryCueLines.flatMap((line, idx) =>
-            isLineActive(line, currentTimeMs) ? [idx] : [],
-        );
-
-        if (indexes.length > 0) return indexes;
-        return latestStartedIndex >= 0 ? [latestStartedIndex] : [];
-    }, [currentTimeMs, latestStartedIndex, primaryCueLines]);
-
-    const scrollTargetIndex = activeIndexes[0] ?? -1;
-
-    const getBackgroundHostIndex = useCallback(
-        (backgroundLine: StructuredLyricCueLine) => {
-            const overlappingActiveIndexes = activeIndexes.filter((idx) =>
-                linesOverlap(primaryCueLines[idx], backgroundLine),
-            );
-
-            if (overlappingActiveIndexes.length === 0) return -1;
-
-            return overlappingActiveIndexes.reduce((bestIdx, idx) => {
-                const bestDistance = Math.abs(
-                    getLineStart(primaryCueLines[bestIdx]) - getLineStart(backgroundLine),
-                );
-                const distance = Math.abs(
-                    getLineStart(primaryCueLines[idx]) - getLineStart(backgroundLine),
-                );
-
-                return distance < bestDistance ? idx : bestIdx;
-            });
-        },
-        [activeIndexes, primaryCueLines],
+    const [renderState, setRenderState] = useState<RenderState>(() =>
+        getRenderState(playbackTimeRef.current, primaryCueLines, backgroundCueLines),
     );
+
+    const activeIndexes = renderState.activeIndexes;
+    const renderTimeMs = renderState.timeMs;
+    const scrollTargetIndex = renderState.scrollTargetIndex;
 
     const handleSeek = useCallback(
         (time: number) => {
@@ -343,25 +408,47 @@ export const EnhancedSynchronizedLyrics = ({
         followRef.current = settings.follow;
     }, [settings.follow]);
 
+    const refreshCueProgressNodes = useCallback(() => {
+        const container = containerRef.current;
+        if (!container) return;
+
+        cueProgressNodesRef.current = Array.from(
+            container.querySelectorAll<HTMLElement>(
+                '[data-enhanced-active="true"] [data-cue-start]',
+            ),
+        );
+        updateCueProgressNodes(playbackTimeRef.current, cueProgressNodesRef.current);
+    }, []);
+
     useEffect(() => {
         let animationFrame: number | undefined;
         const effectiveOffsetMs = offsetMs ?? 0;
         const baseTimeMs = timestamp * 1000 + effectiveOffsetMs;
         const basePerformanceTime = performance.now();
-        let lastRenderTime = 0;
+
+        const syncRenderState = (timeMs: number) => {
+            playbackTimeRef.current = timeMs;
+            const nextRenderState = getRenderState(timeMs, primaryCueLines, backgroundCueLines);
+
+            if (nextRenderState.signature !== renderSignatureRef.current) {
+                renderSignatureRef.current = nextRenderState.signature;
+                setRenderState(nextRenderState);
+            }
+        };
 
         if (playbackStatus !== PlayerStatus.PLAYING) {
-            setCurrentTimeMs(baseTimeMs);
+            syncRenderState(baseTimeMs);
+            updateCueProgressNodes(baseTimeMs, cueProgressNodesRef.current);
             return undefined;
         }
 
         const update = () => {
             const now = performance.now();
+            const timeMs = baseTimeMs + now - basePerformanceTime;
 
-            if (now - lastRenderTime >= CUE_RENDER_INTERVAL_MS) {
-                lastRenderTime = now;
-                setCurrentTimeMs(baseTimeMs + now - basePerformanceTime);
-            }
+            playbackTimeRef.current = timeMs;
+            updateCueProgressNodes(timeMs, cueProgressNodesRef.current);
+            syncRenderState(timeMs);
 
             animationFrame = requestAnimationFrame(update);
         };
@@ -373,7 +460,12 @@ export const EnhancedSynchronizedLyrics = ({
                 cancelAnimationFrame(animationFrame);
             }
         };
-    }, [offsetMs, playbackStatus, timestamp]);
+    }, [backgroundCueLines, offsetMs, playbackStatus, primaryCueLines, timestamp]);
+
+    useEffect(() => {
+        renderSignatureRef.current = renderState.signature;
+        refreshCueProgressNodes();
+    }, [refreshCueProgressNodes, renderState.signature, showAnnotations]);
 
     useEffect(() => {
         const container = containerRef.current;
@@ -478,14 +570,19 @@ export const EnhancedSynchronizedLyrics = ({
                 const activeBackgroundLines = isActive
                     ? backgroundCueLines.filter(
                           (backgroundLine) =>
-                              isLineActive(backgroundLine, currentTimeMs) &&
-                              getBackgroundHostIndex(backgroundLine) === idx,
+                              isLineActive(backgroundLine, renderTimeMs) &&
+                              getBackgroundHostIndex(
+                                  backgroundLine,
+                                  activeIndexes,
+                                  primaryCueLines,
+                              ) === idx,
                       )
                     : [];
 
                 return (
                     <div
                         className={clsx(styles.line, { [styles.active]: isActive })}
+                        data-enhanced-active={isActive ? 'true' : undefined}
                         id={`enhanced-lyric-${idx}`}
                         key={`${line.index}-${line.agentId ?? 'main'}-${getLineStart(line)}`}
                         onClick={() => {
@@ -503,7 +600,7 @@ export const EnhancedSynchronizedLyrics = ({
                             >
                                 <CueText
                                     cueOnly={translationCueLine.cue.length > 0}
-                                    currentTimeMs={currentTimeMs}
+                                    currentTimeMs={renderTimeMs}
                                     line={translationCueLine}
                                 />
                             </div>
@@ -523,7 +620,7 @@ export const EnhancedSynchronizedLyrics = ({
                             >
                                 <CueText
                                     cueOnly={pronunciationCueLine.cue.length > 0}
-                                    currentTimeMs={currentTimeMs}
+                                    currentTimeMs={renderTimeMs}
                                     line={pronunciationCueLine}
                                 />
                             </div>
@@ -538,7 +635,7 @@ export const EnhancedSynchronizedLyrics = ({
                         ) : null}
                         <CueText
                             cueOnly={line.cue.length > 0}
-                            currentTimeMs={currentTimeMs}
+                            currentTimeMs={renderTimeMs}
                             line={line}
                         />
                         {activeBackgroundLines.map((backgroundLine) => (
@@ -551,7 +648,7 @@ export const EnhancedSynchronizedLyrics = ({
                             >
                                 <CueText
                                     cueOnly={backgroundLine.cue.length > 0}
-                                    currentTimeMs={currentTimeMs}
+                                    currentTimeMs={renderTimeMs}
                                     line={backgroundLine}
                                 />
                             </div>
