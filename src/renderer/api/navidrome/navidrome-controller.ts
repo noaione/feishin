@@ -44,6 +44,13 @@ const VERSION_INFO: VersionInfo = [
     // Why 2? Subsonic controller will return 1 for its own implementation
     // Use 2 to denote that Navidrome's own API has a different endpoint
     [
+        // TODO: Change this to 0.63.0 when Navidrome release the new version
+        '0.62.0',
+        {
+            [ServerFeature.LYRICS_MULTIPLE_STRUCTURED]: [1, 2],
+        }
+    ],
+    [
         '0.61.0',
         {
             [ServerFeature.ARTIST_IMAGE_UPLOAD]: [1],

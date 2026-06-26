@@ -5,7 +5,7 @@ import { api } from '/@/renderer/api';
 import { queryKeys } from '/@/renderer/api/query-keys';
 import { queryClient, QueryHookArgs } from '/@/renderer/lib/react-query';
 import { getServerById, useSettingsStore } from '/@/renderer/store';
-import { hasFeature } from '/@/shared/api/utils';
+import { hasFeature, hasFeatureWithVersion } from '/@/shared/api/utils';
 import {
     FullLyricsMetadata,
     InternetProviderLyricResponse,
@@ -156,7 +156,7 @@ export async function fetchLocalLyrics(params: {
         const subsonicLyrics = await api.controller
             .getStructuredLyrics({
                 apiClientProps: { serverId, signal },
-                query: { songId: song.id },
+                query: { songId: song.id, enhanced: hasFeatureWithVersion(server, ServerFeature.LYRICS_MULTIPLE_STRUCTURED, 2) },
             })
             .catch(console.error);
         if (subsonicLyrics?.length) return subsonicLyrics;

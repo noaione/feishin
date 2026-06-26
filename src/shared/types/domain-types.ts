@@ -1339,6 +1339,7 @@ export type LyricsArgs = BaseEndpointArgs & {
 
 export type LyricsQuery = {
     songId: string;
+    enhanced?: boolean;
 };
 
 export type LyricsResponse = string | SynchronizedLyricsArray;

@@ -1370,7 +1370,7 @@ export const SubsonicController: InternalControllerEndpoint = {
         }
 
         if (subsonicFeatures[SubsonicExtensions.SONG_LYRICS]) {
-            features.lyricsMultipleStructured = [1];
+            features.lyricsMultipleStructured = subsonicFeatures[SubsonicExtensions.SONG_LYRICS];
         }
 
         if (subsonicFeatures[SubsonicExtensions.FORM_POST]) {
@@ -1938,6 +1938,7 @@ export const SubsonicController: InternalControllerEndpoint = {
         const res = await ssApiClient(apiClientProps).getStructuredLyrics({
             query: {
                 id: query.songId,
+                enhanced: query.enhanced,
             },
         });
 
