@@ -282,6 +282,28 @@ export const SynchronizedLyrics = ({
     }, [timestamp, setCurrentLyric, status]);
 
     useEffect(() => {
+        if (status !== PlayerStatus.PLAYING) return undefined;
+
+        const frame = requestAnimationFrame(() => {
+            if (lyricTimer.current) {
+                clearTimeout(lyricTimer.current);
+            }
+
+            setCurrentLyric(timestamp * 1000 + delayMsRef.current);
+        });
+
+        return () => cancelAnimationFrame(frame);
+    }, [
+        pronunciationLyrics,
+        setCurrentLyric,
+        showAnnotations,
+        status,
+        timestamp,
+        translatedLyrics,
+        translationLyrics,
+    ]);
+
+    useEffect(() => {
         // Guaranteed cleanup; stop the timer, and just in case also increment
         // the epoch to instruct any dangling timers to stop
         if (lyricTimer.current) {

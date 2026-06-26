@@ -535,6 +535,28 @@ export const EnhancedSynchronizedLyrics = ({
         return () => clearTimeout(timer);
     }, [scrollTargetIndex]);
 
+    useEffect(() => {
+        if (scrollTargetIndex < 0 || !followRef.current || userScrollingRef.current) {
+            return undefined;
+        }
+
+        const frame = requestAnimationFrame(() => {
+            const container = containerRef.current;
+            const activeLine = document.getElementById(`enhanced-lyric-${scrollTargetIndex}`);
+
+            if (!container || !activeLine) return;
+
+            const offsetTop = activeLine.offsetTop - container.clientHeight / 2;
+            programmaticScrollRef.current = true;
+            container.scroll({ behavior: 'smooth', top: offsetTop });
+            setTimeout(() => {
+                programmaticScrollRef.current = false;
+            }, 600);
+        });
+
+        return () => cancelAnimationFrame(frame);
+    }, [scrollTargetIndex, showAnnotations, translatedLyrics, translationLyrics]);
+
     const hideScrollbar = () => {
         containerRef.current?.classList.add('hide-scrollbar');
     };
