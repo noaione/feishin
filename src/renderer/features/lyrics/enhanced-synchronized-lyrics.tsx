@@ -155,9 +155,11 @@ function splitCueLine(line: StructuredLyricCueLine): CueSegment[] {
 }
 
 const CueText = ({
+    cueOnly,
     currentTimeMs,
     line,
 }: {
+    cueOnly?: boolean;
     currentTimeMs: number;
     line: StructuredLyricCueLine;
 }) => {
@@ -167,6 +169,10 @@ const CueText = ({
         <span className={styles.cueText}>
             {segments.map((segment, idx) => {
                 if (segment.type === 'plain') {
+                    if (cueOnly && segment.text.trim().length > 0) {
+                        return null;
+                    }
+
                     return (
                         <span
                             className={styles.plainText}
@@ -447,7 +453,11 @@ export const EnhancedSynchronizedLyrics = ({
                                 className={styles.annotation}
                                 style={{ fontSize: annotationFontSize }}
                             >
-                                <CueText currentTimeMs={currentTimeMs} line={translationCueLine} />
+                                <CueText
+                                    cueOnly={translationCueLine.cue.length > 0}
+                                    currentTimeMs={currentTimeMs}
+                                    line={translationCueLine}
+                                />
                             </div>
                         ) : null}
                         {showAnnotations && !translationCueLine && translationText ? (
@@ -464,6 +474,7 @@ export const EnhancedSynchronizedLyrics = ({
                                 style={{ fontSize: annotationFontSize }}
                             >
                                 <CueText
+                                    cueOnly={pronunciationCueLine.cue.length > 0}
                                     currentTimeMs={currentTimeMs}
                                     line={pronunciationCueLine}
                                 />
@@ -477,7 +488,11 @@ export const EnhancedSynchronizedLyrics = ({
                                 <PlainAnnotation text={pronunciationText} />
                             </div>
                         ) : null}
-                        <CueText currentTimeMs={currentTimeMs} line={line} />
+                        <CueText
+                            cueOnly={line.cue.length > 0}
+                            currentTimeMs={currentTimeMs}
+                            line={line}
+                        />
                         {activeBackgroundLines.map((backgroundLine) => (
                             <div
                                 className={styles.background}
@@ -486,7 +501,11 @@ export const EnhancedSynchronizedLyrics = ({
                                 }-${getLineStart(backgroundLine)}`}
                                 style={{ fontSize: backgroundFontSize }}
                             >
-                                <CueText currentTimeMs={currentTimeMs} line={backgroundLine} />
+                                <CueText
+                                    cueOnly={backgroundLine.cue.length > 0}
+                                    currentTimeMs={currentTimeMs}
+                                    line={backgroundLine}
+                                />
                             </div>
                         ))}
                     </div>
