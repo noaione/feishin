@@ -37,6 +37,19 @@ export type LyricsQueryResult = {
     suppressRemoteAuto: boolean;
 };
 
+export function getSelectableStructuredLyrics(
+    local: FullLyricsMetadata | null | StructuredLyric[],
+) {
+    if (!Array.isArray(local)) return [];
+
+    const mainLyrics = local.filter(isMainStructuredLyric);
+    return mainLyrics.length > 0 ? mainLyrics : local;
+}
+
+export function isMainStructuredLyric(lyric: StructuredLyric): boolean {
+    return lyric.kind === undefined || lyric.kind === 'main';
+}
+
 // Match LRC lyrics format by https://github.com/ustbhuangyi/lyric-parser
 // [mm:ss.SSS] text
 const timeExp = /\[(\d{2,}):(\d{2})(?:\.(\d{2,3}))?]([^\n]+)(\n|$)/g;
@@ -112,7 +125,9 @@ export function computeSelectedFromResult(
     // If setting is set to prefer local lyrics, return the local lyrics if available
     if (preferLocalLyrics && hasLocalLyrics(local)) {
         if (Array.isArray(local) && local.length > 0) {
-            const item = local[Math.min(selectedStructuredIndex, local.length - 1)];
+            const selectableLyrics = getSelectableStructuredLyrics(local);
+            const item =
+                selectableLyrics[Math.min(selectedStructuredIndex, selectableLyrics.length - 1)];
             return { selected: item, selectedSynced: item.synced };
         }
 
@@ -131,7 +146,9 @@ export function computeSelectedFromResult(
 
     // Otherwise, we just return the local lyrics if available, using structured lyrics if available
     if (Array.isArray(local) && local.length > 0) {
-        const item = local[Math.min(selectedStructuredIndex, local.length - 1)];
+        const selectableLyrics = getSelectableStructuredLyrics(local);
+        const item =
+            selectableLyrics[Math.min(selectedStructuredIndex, selectableLyrics.length - 1)];
         return { selected: item, selectedSynced: item.synced };
     }
 
@@ -156,7 +173,14 @@ export async function fetchLocalLyrics(params: {
         const subsonicLyrics = await api.controller
             .getStructuredLyrics({
                 apiClientProps: { serverId, signal },
-                query: { songId: song.id, enhanced: hasFeatureWithVersion(server, ServerFeature.LYRICS_MULTIPLE_STRUCTURED, 2) },
+                query: {
+                    enhanced: hasFeatureWithVersion(
+                        server,
+                        ServerFeature.LYRICS_MULTIPLE_STRUCTURED,
+                        2,
+                    ),
+                    songId: song.id,
+                },
             })
             .catch(console.error);
         if (subsonicLyrics?.length) return subsonicLyrics;
@@ -225,7 +249,9 @@ export function getDisplayOffset(
     }
 
     if (Array.isArray(local) && local.length > 0) {
-        const item = local[Math.min(selectedStructuredIndex, local.length - 1)];
+        const selectableLyrics = getSelectableStructuredLyrics(local);
+        const item =
+            selectableLyrics[Math.min(selectedStructuredIndex, selectableLyrics.length - 1)];
         return item.offsetMs ?? storedOffsetMs;
     }
 

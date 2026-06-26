@@ -1937,8 +1937,8 @@ export const SubsonicController: InternalControllerEndpoint = {
 
         const res = await ssApiClient(apiClientProps).getStructuredLyrics({
             query: {
-                id: query.songId,
                 enhanced: query.enhanced,
+                id: query.songId,
             },
         });
 
@@ -1954,9 +1954,13 @@ export const SubsonicController: InternalControllerEndpoint = {
 
         return lyrics.map((lyric) => {
             const baseLyric = {
+                agents: lyric.agents,
                 artist: lyric.displayArtist || '',
+                cueLine: lyric.cueLine,
+                kind: lyric.kind,
                 lang: lyric.lang,
                 name: lyric.displayTitle || '',
+                offsetMs: lyric.offset,
                 remote: false,
                 source: apiClientProps.server?.name || 'music server',
             };
@@ -1970,7 +1974,7 @@ export const SubsonicController: InternalControllerEndpoint = {
             }
             return {
                 ...baseLyric,
-                lyrics: lyric.line.map((line) => [line.value]).join('\n'),
+                lyrics: lyric.line.map((line) => line.value).join('\n'),
                 synced: false,
             };
         });

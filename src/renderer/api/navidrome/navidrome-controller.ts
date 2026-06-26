@@ -48,7 +48,7 @@ const VERSION_INFO: VersionInfo = [
         '0.62.0',
         {
             [ServerFeature.LYRICS_MULTIPLE_STRUCTURED]: [1, 2],
-        }
+        },
     ],
     [
         '0.61.0',

@@ -400,8 +400,8 @@ const serverInfo = z.object({
 });
 
 const structuredLyricsParameters = z.object({
-    id: z.string(),
     enhanced: z.boolean().optional(),
+    id: z.string(),
 });
 
 const lyricLine = z.object({
@@ -410,36 +410,36 @@ const lyricLine = z.object({
 });
 
 const lyricCue = z.object({
-    start: z.number(),
-    end: z.number().optional(),
-    byteStart: z.number(),
     byteEnd: z.number(),
+    byteStart: z.number(),
+    end: z.number().optional(),
+    start: z.number(),
     value: z.string(),
 });
 
 const lyricCueLine = z.object({
-    index: z.number(),
     agentId: z.string().optional(),
-    start: z.number().optional(),
+    cue: z.array(lyricCue),
     end: z.number().optional(),
+    index: z.number(),
+    start: z.number().optional(),
     value: z.string(),
-    cue: z.array(lyricCue)
 });
 
 const lyricAgent = z.object({
     id: z.string(),
-    role: z.enum(['main', 'voice', 'bg', 'group']),
     name: z.string().optional(),
+    role: z.enum(['main', 'voice', 'bg', 'group']),
 });
 
 const structuredLyric = z.object({
-    kind: z.enum(['main', 'translation', 'pronunciation']).optional(),
+    agents: z.array(lyricAgent).optional(),
+    cueLine: z.array(lyricCueLine).optional(),
     displayArtist: z.string().optional(),
     displayTitle: z.string().optional(),
-    agents: z.array(lyricAgent).optional(),
+    kind: z.enum(['main', 'translation', 'pronunciation']).optional(),
     lang: z.string(),
     line: z.array(lyricLine),
-    cueLine: z.array(lyricCueLine).optional(),
     offset: z.number().optional(),
     synced: z.boolean(),
 });

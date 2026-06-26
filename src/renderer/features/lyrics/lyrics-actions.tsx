@@ -24,6 +24,7 @@ interface LyricsActionsProps {
     onUpdateOffset: (offsetMs: number) => void;
     setIndex: (idx: number) => void;
     settingsKey?: string;
+    showAnnotations?: boolean;
     synced?: boolean;
 }
 
@@ -38,6 +39,7 @@ export const LyricsActions = ({
     onTranslateLyric,
     onUpdateOffset,
     setIndex,
+    showAnnotations,
 }: LyricsActionsProps) => {
     const { t } = useTranslation();
     const currentSong = usePlayerSong();
@@ -139,7 +141,7 @@ export const LyricsActions = ({
                             disabled={isActionsDisabled}
                             onClick={onTranslateLyric}
                             uppercase
-                            variant="subtle"
+                            variant={showAnnotations ? 'filled' : 'subtle'}
                         >
                             {t('common.translation')}
                         </Button>

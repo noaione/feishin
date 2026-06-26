@@ -1338,8 +1338,8 @@ export type LyricsArgs = BaseEndpointArgs & {
 };
 
 export type LyricsQuery = {
-    songId: string;
     enhanced?: boolean;
+    songId: string;
 };
 
 export type LyricsResponse = string | SynchronizedLyricsArray;
@@ -1795,23 +1795,55 @@ export type StreamQuery = {
     transcode: boolean;
 };
 
-export type StructuredLyric = (StructuredSyncedLyric | StructuredUnsyncedLyric) & {
+export type StructuredLyric = StructuredSyncedLyric | StructuredUnsyncedLyric;
+
+export type StructuredLyricAgent = {
+    id: string;
+    name?: string;
+    role: 'bg' | 'group' | 'main' | 'voice';
+};
+
+export type StructuredLyricBase = {
+    agents?: StructuredLyricAgent[];
+    cueLine?: StructuredLyricCueLine[];
+    kind?: StructuredLyricKind;
     lang: string;
 };
+
+export type StructuredLyricCue = {
+    byteEnd: number;
+    byteStart: number;
+    end?: number;
+    start: number;
+    value: string;
+};
+
+export type StructuredLyricCueLine = {
+    agentId?: string;
+    cue: StructuredLyricCue[];
+    end?: number;
+    index: number;
+    start?: number;
+    value: string;
+};
+
+export type StructuredLyricKind = 'main' | 'pronunciation' | 'translation';
 
 export type StructuredLyricsArgs = BaseEndpointArgs & {
     query: LyricsQuery;
 };
 
-export type StructuredSyncedLyric = Omit<FullLyricsMetadata, 'lyrics'> & {
-    lyrics: SynchronizedLyricsArray;
-    synced: true;
-};
+export type StructuredSyncedLyric = Omit<FullLyricsMetadata, 'lyrics'> &
+    StructuredLyricBase & {
+        lyrics: SynchronizedLyricsArray;
+        synced: true;
+    };
 
-export type StructuredUnsyncedLyric = Omit<FullLyricsMetadata, 'lyrics'> & {
-    lyrics: string;
-    synced: false;
-};
+export type StructuredUnsyncedLyric = Omit<FullLyricsMetadata, 'lyrics'> &
+    StructuredLyricBase & {
+        lyrics: string;
+        synced: false;
+    };
 
 export type Tag = {
     name: string;
