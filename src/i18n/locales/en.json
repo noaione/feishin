@@ -957,6 +957,8 @@
         "lyricFetch": "Fetch lyrics from the internet",
         "lyricFetchProvider_description": "Select the providers to fetch lyrics from",
         "lyricFetchProvider": "Providers to fetch lyrics from",
+        "enhancedLyricsBreakThreshold_description": "Show the enhanced lyrics break indicator when the gap between lines is at least this many milliseconds",
+        "enhancedLyricsBreakThreshold": "Enhanced lyrics break threshold (ms)",
         "lyricOffset_description": "Offset the lyric by the specified amount of milliseconds",
         "lyricOffset": "Lyric offset (ms)",
         "logLevel": "Log level",

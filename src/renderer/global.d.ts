@@ -66,6 +66,7 @@ declare global {
         FS_LYRICS_ALIGNMENT?: string;
         FS_LYRICS_DELAY_MS?: string;
         FS_LYRICS_ENABLE_AUTO_TRANSLATION?: string;
+        FS_LYRICS_ENHANCED_BREAK_THRESHOLD_MS?: string;
         FS_LYRICS_FETCH?: string;
         FS_LYRICS_FOLLOW?: string;
         FS_LYRICS_PREFER_LOCAL?: string;

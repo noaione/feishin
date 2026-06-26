@@ -359,6 +359,25 @@ export const LyricsSettingsForm = ({ settingsKey }: LyricsSettingsFormProps) => 
         },
         {
             control: (
+                <NumberInput
+                    defaultValue={lyricsSettings.enhancedLyricsBreakThresholdMs ?? 1500}
+                    min={0}
+                    onBlur={(e) => {
+                        const value = Number(e.currentTarget.value);
+                        updateLyricsSetting({ enhancedLyricsBreakThresholdMs: value });
+                    }}
+                    step={100}
+                    width={100}
+                />
+            ),
+            description: t('setting.enhancedLyricsBreakThreshold', {
+                context: 'description',
+            }),
+            isHidden: !isElectron(),
+            title: t('setting.enhancedLyricsBreakThreshold'),
+        },
+        {
+            control: (
                 <Select
                     data={languages}
                     onChange={(value) => {

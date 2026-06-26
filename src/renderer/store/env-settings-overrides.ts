@@ -403,6 +403,11 @@ const ENV_SETTING_SPECS: EnvSettingSpec[] = [
     { key: 'FS_LYRICS_FETCH', path: ['lyrics', 'fetch'], type: 'bool' },
     { key: 'FS_LYRICS_FOLLOW', path: ['lyrics', 'follow'], type: 'bool' },
     { key: 'FS_LYRICS_DELAY_MS', path: ['lyrics', 'delayMs'], type: 'num' },
+    {
+        key: 'FS_LYRICS_ENHANCED_BREAK_THRESHOLD_MS',
+        path: ['lyrics', 'enhancedLyricsBreakThresholdMs'],
+        type: 'num',
+    },
     { key: 'FS_LYRICS_PREFER_LOCAL', path: ['lyrics', 'preferLocalLyrics'], type: 'bool' },
     { key: 'FS_LYRICS_SHOW_MATCH', path: ['lyrics', 'showMatch'], type: 'bool' },
     { key: 'FS_LYRICS_SHOW_PROVIDER', path: ['lyrics', 'showProvider'], type: 'bool' },

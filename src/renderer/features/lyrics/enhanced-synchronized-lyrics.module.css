@@ -46,6 +46,17 @@
     opacity: 0.78;
 }
 
+.break-line {
+    display: none;
+    font-weight: 700;
+}
+
+.break-line.active {
+    display: block;
+    opacity: 0.75;
+    transform: translateY(0) scale(1);
+}
+
 .cue-text {
     white-space: pre-wrap;
 }

@@ -100,6 +100,7 @@ These variables override app settings **on first run** when no persisted setting
 | `lyrics.fetch` | `true` | `FS_LYRICS_FETCH` | `true` / `false` — Fetch lyrics. |
 | `lyrics.follow` | `true` | `FS_LYRICS_FOLLOW` | `true` / `false` — Follow current line. |
 | `lyrics.delayMs` | `0` | `FS_LYRICS_DELAY_MS` | Sync delay in milliseconds. |
+| `lyrics.enhancedLyricsBreakThresholdMs` | `1500` | `FS_LYRICS_ENHANCED_BREAK_THRESHOLD_MS` | Minimum line gap in milliseconds before showing the enhanced lyrics break indicator. |
 | `lyrics.preferLocalLyrics` | `true` | `FS_LYRICS_PREFER_LOCAL` | `true` / `false` — Prefer local lyric files. |
 | `lyrics.showMatch` | `true` | `FS_LYRICS_SHOW_MATCH` | `true` / `false`. |
 | `lyrics.showProvider` | `true` | `FS_LYRICS_SHOW_PROVIDER` | `true` / `false`. |

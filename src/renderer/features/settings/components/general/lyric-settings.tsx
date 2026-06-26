@@ -159,6 +159,25 @@ export const LyricSettings = memo(() => {
         },
         {
             control: (
+                <NumberInput
+                    defaultValue={settings.enhancedLyricsBreakThresholdMs ?? 1500}
+                    min={0}
+                    onBlur={(e) => {
+                        const value = Number(e.currentTarget.value);
+                        updateSetting({ enhancedLyricsBreakThresholdMs: value });
+                    }}
+                    step={100}
+                    width={100}
+                />
+            ),
+            description: t('setting.enhancedLyricsBreakThreshold', {
+                context: 'description',
+            }),
+            isHidden: !isElectron(),
+            title: t('setting.enhancedLyricsBreakThreshold'),
+        },
+        {
+            control: (
                 <Select
                     data={languages}
                     onChange={(value) => {

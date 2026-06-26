@@ -26,6 +26,8 @@ import { PlayerStatus, PlayerType } from '/@/shared/types/types';
 const mpvPlayer = isElectron() ? window.api.mpvPlayer : null;
 const utils = isElectron() ? window.api.utils : null;
 const mpris = isElectron() && utils?.isLinux() ? window.api.mpris : null;
+const BREAK_AGENT_ID = '__feishin_break__';
+const DEFAULT_ENHANCED_LYRICS_BREAK_THRESHOLD_MS = 1500;
 
 export interface EnhancedSynchronizedLyricsProps extends Omit<StructuredSyncedLyric, 'lyrics'> {
     lyrics: SynchronizedLyricsArray;
@@ -93,12 +95,7 @@ function findAnnotationCueLine(
 }
 
 function getActiveIndexes(lines: StructuredLyricCueLine[], currentTimeMs: number) {
-    const indexes = lines.flatMap((line, idx) => (isLineActive(line, currentTimeMs) ? [idx] : []));
-
-    if (indexes.length > 0) return indexes;
-
-    const latestStartedIndex = getLatestStartedIndex(lines, currentTimeMs);
-    return latestStartedIndex >= 0 ? [latestStartedIndex] : [];
+    return lines.flatMap((line, idx) => (isLineActive(line, currentTimeMs) ? [idx] : []));
 }
 
 function getAnnotationText(
@@ -137,6 +134,35 @@ function getBackgroundLineKey(line: StructuredLyricCueLine) {
     return `${line.index}:${line.agentId ?? ''}:${getLineStart(line)}`;
 }
 
+function getBreakCueLine(
+    previousLine: StructuredLyricCueLine,
+    nextLine: StructuredLyricCueLine,
+    index: number,
+    minGapMs: number,
+): null | StructuredLyricCueLine {
+    const start = getLineEnd(previousLine) + 1;
+    const end = getLineStart(nextLine) - 1;
+
+    if (end - start + 1 < minGapMs) return null;
+
+    return {
+        agentId: BREAK_AGENT_ID,
+        cue: [
+            {
+                byteEnd: 2,
+                byteStart: 0,
+                end,
+                start,
+                value: '...',
+            },
+        ],
+        end,
+        index,
+        start,
+        value: '...',
+    };
+}
+
 function getCueProgress(cue: StructuredLyricCue, currentTimeMs: number, fallbackEnd?: number) {
     if (currentTimeMs < cue.start) return 0;
 
@@ -149,19 +175,6 @@ function getCueProgress(cue: StructuredLyricCue, currentTimeMs: number, fallback
 
     if (effectiveEnd === undefined) return 1;
     return clamp((currentTimeMs - cue.start) / (effectiveEnd - cue.start));
-}
-
-function getLatestStartedIndex(lines: StructuredLyricCueLine[], currentTimeMs: number) {
-    let index = -1;
-
-    for (let idx = 0; idx < lines.length; idx += 1) {
-        if (currentTimeMs < getLineStart(lines[idx])) {
-            break;
-        }
-        index = idx;
-    }
-
-    return index;
 }
 
 function getLineEnd(line: StructuredLyricCueLine) {
@@ -211,6 +224,10 @@ function isBackgroundAgent(
     if (!agentId) return false;
     if (agentId.startsWith('__nd_bg__')) return true;
     return agents?.find((agent) => agent.id === agentId)?.role === 'bg';
+}
+
+function isBreakCueLine(line: StructuredLyricCueLine) {
+    return line.agentId === BREAK_AGENT_ID;
 }
 
 function isLineActive(line: StructuredLyricCueLine, currentTimeMs: number) {
@@ -276,6 +293,15 @@ function updateCueProgressNodes(currentTimeMs: number, nodes: HTMLElement[]) {
 
         node.style.setProperty('--cue-progress', progress.toString());
     }
+}
+
+function withBreakCueLines(lines: StructuredLyricCueLine[], minGapMs: number) {
+    return lines.flatMap((line, idx) => {
+        if (idx === 0) return [line];
+
+        const breakLine = getBreakCueLine(lines[idx - 1], line, -idx, minGapMs);
+        return breakLine ? [breakLine, line] : [line];
+    });
 }
 
 const CueText = ({
@@ -373,6 +399,8 @@ export const EnhancedSynchronizedLyrics = ({
                 ? displaySettings.scaleNonActive
                 : 0.95,
     };
+    const enhancedLyricsBreakThresholdMs =
+        settings.enhancedLyricsBreakThresholdMs ?? DEFAULT_ENHANCED_LYRICS_BREAK_THRESHOLD_MS;
     const { mediaSeekToTimestamp } = usePlayerActions();
     const playbackStatus = usePlayerStatus();
     const timestamp = usePlayerTimestamp();
@@ -397,8 +425,11 @@ export const EnhancedSynchronizedLyrics = ({
 
     const primaryCueLines = useMemo(() => {
         const primary = sortedCueLines.filter((line) => !isBackgroundAgent(line.agentId, agents));
-        return primary.length > 0 ? primary : sortedCueLines;
-    }, [agents, sortedCueLines]);
+        return withBreakCueLines(
+            primary.length > 0 ? primary : sortedCueLines,
+            enhancedLyricsBreakThresholdMs,
+        );
+    }, [agents, enhancedLyricsBreakThresholdMs, sortedCueLines]);
 
     const externalTranslationLines = useMemo(
         () => translatedLyrics?.split('\n'),
@@ -600,31 +631,40 @@ export const EnhancedSynchronizedLyrics = ({
             )}
             {primaryCueLines.map((line, idx) => {
                 const isActive = activeIndexes.includes(idx);
+                const isBreak = isBreakCueLine(line);
                 const annotationFontSize = Math.max(12, settings.fontSize * 0.58);
                 const backgroundFontSize = Math.max(12, settings.fontSize * 0.7);
-                const translationCueLine = findAnnotationCueLine(translationLyrics, line);
-                const pronunciationCueLine = findAnnotationCueLine(pronunciationLyrics, line);
-                const translationText = getAnnotationText(
-                    translationLyrics,
-                    line.index,
-                    externalTranslationLines,
-                );
-                const pronunciationText = getAnnotationText(pronunciationLyrics, line.index);
-                const activeBackgroundLines = isActive
-                    ? backgroundCueLines.filter(
-                          (backgroundLine) =>
-                              isLineActive(backgroundLine, renderTimeMs) &&
-                              getBackgroundHostIndex(
-                                  backgroundLine,
-                                  activeIndexes,
-                                  primaryCueLines,
-                              ) === idx,
-                      )
-                    : [];
+                const translationCueLine = isBreak
+                    ? undefined
+                    : findAnnotationCueLine(translationLyrics, line);
+                const pronunciationCueLine = isBreak
+                    ? undefined
+                    : findAnnotationCueLine(pronunciationLyrics, line);
+                const translationText = isBreak
+                    ? undefined
+                    : getAnnotationText(translationLyrics, line.index, externalTranslationLines);
+                const pronunciationText = isBreak
+                    ? undefined
+                    : getAnnotationText(pronunciationLyrics, line.index);
+                const activeBackgroundLines =
+                    isActive && !isBreak
+                        ? backgroundCueLines.filter(
+                              (backgroundLine) =>
+                                  isLineActive(backgroundLine, renderTimeMs) &&
+                                  getBackgroundHostIndex(
+                                      backgroundLine,
+                                      activeIndexes,
+                                      primaryCueLines,
+                                  ) === idx,
+                          )
+                        : [];
 
                 return (
                     <div
-                        className={clsx(styles.line, { [styles.active]: isActive })}
+                        className={clsx(styles.line, {
+                            [styles.active]: isActive,
+                            [styles.breakLine]: isBreak,
+                        })}
                         data-enhanced-active={isActive ? 'true' : undefined}
                         id={`enhanced-lyric-${idx}`}
                         key={`${line.index}-${line.agentId ?? 'main'}-${getLineStart(line)}`}
