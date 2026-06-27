@@ -94,8 +94,14 @@ function findAnnotationCueLine(
     return lyric?.cueLine?.find((line) => line.index === mainLine.index);
 }
 
-function getActiveIndexes(lines: StructuredLyricCueLine[], currentTimeMs: number) {
-    return lines.flatMap((line, idx) => (isLineActive(line, currentTimeMs) ? [idx] : []));
+function getActiveIndexes(
+    lines: StructuredLyricCueLine[],
+    currentTimeMs: number,
+    lineEndByIndex: Map<number, number>,
+) {
+    return lines.flatMap((line, idx) =>
+        isLineActive(line, currentTimeMs, lineEndByIndex) ? [idx] : [],
+    );
 }
 
 function getAnnotationText(
@@ -113,7 +119,7 @@ function getBackgroundHostIndex(
     primaryCueLines: StructuredLyricCueLine[],
 ) {
     const overlappingActiveIndexes = activeIndexes.filter((idx) =>
-        linesOverlap(primaryCueLines[idx], backgroundLine),
+        lineIndexesMatch(primaryCueLines[idx], backgroundLine),
     );
 
     if (overlappingActiveIndexes.length === 0) return -1;
@@ -138,9 +144,10 @@ function getBreakCueLine(
     previousLine: StructuredLyricCueLine,
     nextLine: StructuredLyricCueLine,
     index: number,
+    lineEndByIndex: Map<number, number>,
     minGapMs: number,
 ): null | StructuredLyricCueLine {
-    const start = getLineEnd(previousLine) + 1;
+    const start = getLineActiveEnd(previousLine, lineEndByIndex) + 1;
     const end = getLineStart(nextLine) - 1;
 
     if (end - start + 1 < minGapMs) return null;
@@ -172,8 +179,27 @@ function getCueProgress(cue: StructuredLyricCue, currentTimeMs: number) {
     return clamp((currentTimeMs - cue.start) / (effectiveEnd - cue.start));
 }
 
+function getLineActiveEnd(line: StructuredLyricCueLine, lineEndByIndex: Map<number, number>) {
+    return lineEndByIndex.get(line.index) ?? getLineEnd(line);
+}
+
 function getLineEnd(line: StructuredLyricCueLine) {
     return line.end ?? line.cue.at(-1)?.end ?? line.cue.at(-1)?.start ?? getLineStart(line);
+}
+
+function getLineEndByIndex(lines: StructuredLyricCueLine[]) {
+    const lineEndByIndex = new Map<number, number>();
+
+    for (const line of lines) {
+        const end = getLineEnd(line);
+        const currentEnd = lineEndByIndex.get(line.index);
+
+        if (currentEnd === undefined || end > currentEnd) {
+            lineEndByIndex.set(line.index, end);
+        }
+    }
+
+    return lineEndByIndex;
 }
 
 function getLineStart(line: StructuredLyricCueLine) {
@@ -184,11 +210,12 @@ function getRenderState(
     timeMs: number,
     primaryCueLines: StructuredLyricCueLine[],
     backgroundCueLines: StructuredLyricCueLine[],
+    lineEndByIndex: Map<number, number>,
 ): RenderState {
-    const activeIndexes = getActiveIndexes(primaryCueLines, timeMs);
+    const activeIndexes = getActiveIndexes(primaryCueLines, timeMs, lineEndByIndex);
     const backgroundSignature = backgroundCueLines
         .flatMap((line) => {
-            if (!isLineActive(line, timeMs)) return [];
+            if (!isLineActive(line, timeMs, lineEndByIndex)) return [];
 
             const hostIndex = getBackgroundHostIndex(line, activeIndexes, primaryCueLines);
             return hostIndex >= 0 ? [`${hostIndex}:${getBackgroundLineKey(line)}`] : [];
@@ -225,12 +252,19 @@ function isBreakCueLine(line: StructuredLyricCueLine) {
     return line.agentId === BREAK_AGENT_ID;
 }
 
-function isLineActive(line: StructuredLyricCueLine, currentTimeMs: number) {
-    return currentTimeMs >= getLineStart(line) && currentTimeMs <= getLineEnd(line);
+function isLineActive(
+    line: StructuredLyricCueLine,
+    currentTimeMs: number,
+    lineEndByIndex: Map<number, number>,
+) {
+    return (
+        currentTimeMs >= getLineStart(line) &&
+        currentTimeMs <= getLineActiveEnd(line, lineEndByIndex)
+    );
 }
 
-function linesOverlap(a: StructuredLyricCueLine, b: StructuredLyricCueLine) {
-    return getLineStart(a) <= getLineEnd(b) && getLineStart(b) <= getLineEnd(a);
+function lineIndexesMatch(a: StructuredLyricCueLine, b: StructuredLyricCueLine) {
+    return a.index === b.index;
 }
 
 function splitCueLine(line: StructuredLyricCueLine): CueSegment[] {
@@ -282,11 +316,15 @@ function updateCueProgressNodes(currentTimeMs: number, nodes: HTMLElement[]) {
     }
 }
 
-function withBreakCueLines(lines: StructuredLyricCueLine[], minGapMs: number) {
+function withBreakCueLines(
+    lines: StructuredLyricCueLine[],
+    lineEndByIndex: Map<number, number>,
+    minGapMs: number,
+) {
     return lines.flatMap((line, idx) => {
         if (idx === 0) return [line];
 
-        const breakLine = getBreakCueLine(lines[idx - 1], line, -idx, minGapMs);
+        const breakLine = getBreakCueLine(lines[idx - 1], line, -idx, lineEndByIndex, minGapMs);
         return breakLine ? [breakLine, line] : [line];
     });
 }
@@ -400,6 +438,8 @@ export const EnhancedSynchronizedLyrics = ({
         [cueLine],
     );
 
+    const lineEndByIndex = useMemo(() => getLineEndByIndex(sortedCueLines), [sortedCueLines]);
+
     const backgroundCueLines = useMemo(
         () => sortedCueLines.filter((line) => isBackgroundAgent(line.agentId, agents)),
         [agents, sortedCueLines],
@@ -409,9 +449,10 @@ export const EnhancedSynchronizedLyrics = ({
         const primary = sortedCueLines.filter((line) => !isBackgroundAgent(line.agentId, agents));
         return withBreakCueLines(
             primary.length > 0 ? primary : sortedCueLines,
+            lineEndByIndex,
             enhancedLyricsBreakThresholdMs,
         );
-    }, [agents, enhancedLyricsBreakThresholdMs, sortedCueLines]);
+    }, [agents, enhancedLyricsBreakThresholdMs, lineEndByIndex, sortedCueLines]);
 
     const externalTranslationLines = useMemo(
         () => translatedLyrics?.split('\n'),
@@ -419,7 +460,12 @@ export const EnhancedSynchronizedLyrics = ({
     );
 
     const [renderState, setRenderState] = useState<RenderState>(() =>
-        getRenderState(playbackTimeRef.current, primaryCueLines, backgroundCueLines),
+        getRenderState(
+            playbackTimeRef.current,
+            primaryCueLines,
+            backgroundCueLines,
+            lineEndByIndex,
+        ),
     );
 
     const activeIndexes = renderState.activeIndexes;
@@ -462,7 +508,12 @@ export const EnhancedSynchronizedLyrics = ({
 
         const syncRenderState = (timeMs: number) => {
             playbackTimeRef.current = timeMs;
-            const nextRenderState = getRenderState(timeMs, primaryCueLines, backgroundCueLines);
+            const nextRenderState = getRenderState(
+                timeMs,
+                primaryCueLines,
+                backgroundCueLines,
+                lineEndByIndex,
+            );
 
             if (nextRenderState.signature !== renderSignatureRef.current) {
                 renderSignatureRef.current = nextRenderState.signature;
@@ -494,7 +545,7 @@ export const EnhancedSynchronizedLyrics = ({
                 cancelAnimationFrame(animationFrame);
             }
         };
-    }, [backgroundCueLines, offsetMs, playbackStatus, primaryCueLines, timestamp]);
+    }, [backgroundCueLines, lineEndByIndex, offsetMs, playbackStatus, primaryCueLines, timestamp]);
 
     useEffect(() => {
         renderSignatureRef.current = renderState.signature;
@@ -632,7 +683,7 @@ export const EnhancedSynchronizedLyrics = ({
                     isActive && !isBreak
                         ? backgroundCueLines.filter(
                               (backgroundLine) =>
-                                  isLineActive(backgroundLine, renderTimeMs) &&
+                                  isLineActive(backgroundLine, renderTimeMs, lineEndByIndex) &&
                                   getBackgroundHostIndex(
                                       backgroundLine,
                                       activeIndexes,
