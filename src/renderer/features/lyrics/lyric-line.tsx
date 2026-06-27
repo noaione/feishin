@@ -16,22 +16,6 @@ interface LyricLineProps extends ComponentPropsWithoutRef<'div'> {
     translatedText?: null | string;
 }
 
-function getLyricParts(text: string, annotations?: (null | string | undefined)[]) {
-    const legacyLines = text.split(/_BREAK_|__BREAK__/g);
-    const mainText = annotations ? text : (legacyLines.at(-1) ?? text);
-    const rawAnnotations = annotations ?? legacyLines.slice(0, -1);
-
-    return {
-        annotations: rawAnnotations.filter(
-            (line): line is string =>
-                typeof line === 'string' &&
-                line.length > 0 &&
-                normalizeLyricText(line) !== normalizeLyricText(mainText),
-        ),
-        text: mainText,
-    };
-}
-
 function normalizeLyricText(text: string) {
     return text.replaceAll(/\s+/g, ' ').trim();
 }
@@ -48,6 +32,22 @@ export const LyricLine = memo(
     }: LyricLineProps) => {
         const lines = useMemo(() => text.split('_BREAK_'), [text]);
 
+        /* Show if diferent */
+        const normalizedRomajiText = useMemo(() => {
+            if (!romajiText) return null;
+            const normRomaji = normalizeLyricText(romajiText);
+            const normText = normalizeLyricText(text);
+            if (normRomaji === normText) return null;
+            return romajiText;
+        }, [romajiText, text]);
+        const normalizedTranslatedText = useMemo(() => {
+            if (!translatedText) return null;
+            const normTranslated = normalizeLyricText(translatedText);
+            const normText = normalizeLyricText(text);
+            if (normTranslated === normText) return null;
+            return translatedText;
+        }, [translatedText, text]);
+
         const style = useMemo(
             () => ({
                 fontSize,
@@ -62,14 +62,17 @@ export const LyricLine = memo(
                     {lines.map((line, index) => (
                         <span dangerouslySetInnerHTML={{ __html: sanitize(line) }} key={index} />
                     ))}
-                    {romajiText && (
+                    {normalizedRomajiText && (
                         <span
                             className={styles.annotation}
-                            dangerouslySetInnerHTML={{ __html: sanitize(romajiText) }}
+                            dangerouslySetInnerHTML={{ __html: sanitize(normalizedRomajiText) }}
                         />
                     )}
-                    {translatedText && (
-                        <span dangerouslySetInnerHTML={{ __html: sanitize(translatedText) }} />
+                    {normalizedTranslatedText && (
+                        <span
+                            className={styles.annotation}
+                            dangerouslySetInnerHTML={{ __html: sanitize(normalizedTranslatedText) }}
+                        />
                     )}
                 </Stack>
             </Box>

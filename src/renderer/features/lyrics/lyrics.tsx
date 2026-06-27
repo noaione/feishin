@@ -490,12 +490,12 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
                                     <SynchronizedLyrics
                                         {...(displayLyrics as SynchronizedLyricsProps)}
                                         offsetMs={displayOffsetMs}
+                                        pronunciationLyrics={serverPronunciationLyrics}
                                         romajiLyrics={
                                             enableRomaji
                                                 ? (romajiConvertedLyrics as SynchronizedLyricsProps['romajiLyrics'])
                                                 : null
                                         }
-                                        pronunciationLyrics={serverPronunciationLyrics}
                                         settingsKey={settingsKey}
                                         showAnnotations={showAnnotations}
                                         translatedLyrics={showAnnotations ? translatedLyrics : null}
