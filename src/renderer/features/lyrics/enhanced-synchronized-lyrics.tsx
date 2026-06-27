@@ -684,6 +684,7 @@ export const EnhancedSynchronizedLyrics = ({
                 />
             )}
             {primaryCueLines.map((line, idx) => {
+                const startTime = getLineStart(line);
                 const isActive = activeIndexes.includes(idx);
                 const isBreak = isBreakCueLine(line);
                 const annotationFontSize = Math.max(14, settings.fontSize * 0.72);
@@ -737,11 +738,10 @@ export const EnhancedSynchronizedLyrics = ({
                         })}
                         data-enhanced-active={isActive ? 'true' : undefined}
                         id={`enhanced-lyric-${idx}`}
-                        key={`${line.index}-${line.agentId ?? 'main'}-${getLineStart(line)}`}
+                        key={`main-${line.index}-${line.agentId ?? 'main'}`}
                         onClick={() => {
-                            const time = getLineStart(line);
-                            if (time > 0 && Number.isFinite(time)) {
-                                handleSeek(time / 1000);
+                            if (startTime > 0 && Number.isFinite(startTime)) {
+                                handleSeek(startTime / 1000);
                             }
                         }}
                         style={{ fontSize: settings.fontSize }}
@@ -794,9 +794,7 @@ export const EnhancedSynchronizedLyrics = ({
                         {activeBackgroundLines.map((backgroundLine) => (
                             <div
                                 className={styles.background}
-                                key={`${backgroundLine.index}-${
-                                    backgroundLine.agentId ?? 'bg'
-                                }-${getLineStart(backgroundLine)}`}
+                                key={`bg-${backgroundLine.index}-${backgroundLine.agentId ?? 'bg'}`}
                                 style={{ fontSize: backgroundFontSize }}
                             >
                                 <CueText

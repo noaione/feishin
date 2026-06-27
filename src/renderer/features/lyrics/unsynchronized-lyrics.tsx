@@ -69,6 +69,7 @@ export const UnsynchronizedLyrics = ({
             {lines.map((text, idx) => (
                 <LyricLine
                     alignment={settings.alignment}
+                    annotations={[translatedLines[idx]]}
                     className="lyric-line unsynchronized"
                     fontSize={settings.fontSizeUnsync}
                     id={`lyric-${idx}`}

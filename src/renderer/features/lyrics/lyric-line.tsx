@@ -9,10 +9,31 @@ import { Stack } from '/@/shared/components/stack/stack';
 
 interface LyricLineProps extends ComponentPropsWithoutRef<'div'> {
     alignment: 'center' | 'left' | 'right';
+    annotations?: (null | string | undefined)[];
     fontSize: number;
     romajiText?: null | string;
     text: string;
     translatedText?: null | string;
+}
+
+function getLyricParts(text: string, annotations?: (null | string | undefined)[]) {
+    const legacyLines = text.split(/_BREAK_|__BREAK__/g);
+    const mainText = annotations ? text : (legacyLines.at(-1) ?? text);
+    const rawAnnotations = annotations ?? legacyLines.slice(0, -1);
+
+    return {
+        annotations: rawAnnotations.filter(
+            (line): line is string =>
+                typeof line === 'string' &&
+                line.length > 0 &&
+                normalizeLyricText(line) !== normalizeLyricText(mainText),
+        ),
+        text: mainText,
+    };
+}
+
+function normalizeLyricText(text: string) {
+    return text.replaceAll(/\s+/g, ' ').trim();
 }
 
 export const LyricLine = memo(
@@ -43,7 +64,7 @@ export const LyricLine = memo(
                     ))}
                     {romajiText && (
                         <span
-                            className={styles.romajiLine}
+                            className={styles.annotation}
                             dangerouslySetInnerHTML={{ __html: sanitize(romajiText) }}
                         />
                     )}
