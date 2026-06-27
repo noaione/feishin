@@ -38,7 +38,7 @@ import { usePlayerEvents } from '/@/renderer/features/player/audio-player/hooks/
 import { useIsRadioActive } from '/@/renderer/features/radio/hooks/use-radio-player';
 import { ComponentErrorBoundary } from '/@/renderer/features/shared/components/component-error-boundary';
 import { queryClient } from '/@/renderer/lib/react-query';
-import { useLyricsSettings, usePlayerSong } from '/@/renderer/store';
+import { useLyricsSettings, usePlayerSong, useSettingsStoreActions } from '/@/renderer/store';
 import { ActionIcon } from '/@/shared/components/action-icon/action-icon';
 import { Center } from '/@/shared/components/center/center';
 import { Group } from '/@/shared/components/group/group';
@@ -101,19 +101,21 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
 
     const isLyricsDisabled = isRadioActive;
 
+    const lyricsSettings = useLyricsSettings();
     const {
         enableAutoTranslation,
         enableFurigana,
         enableRomaji,
         preferLocalLyrics,
+        showAnnotations = false,
         translationApiKey,
         translationApiProvider,
         translationTargetLanguage,
-    } = useLyricsSettings();
+    } = lyricsSettings;
+    const { setSettings } = useSettingsStoreActions();
     const { t } = useTranslation();
     const [index, setIndexState] = useState(0);
     const [translatedLyrics, setTranslatedLyrics] = useState<null | string>(null);
-    const [showAnnotations, setShowAnnotations] = useState(false);
     const [pendingSongId, setPendingSongId] = useState<string | undefined>(currentSong?.id);
     const lyricsFetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
     const previousSongIdRef = useRef<string | undefined>(currentSong?.id);
@@ -218,6 +220,18 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
 
     const displayOffsetMs = isLyricsDisabled ? 0 : currentOffsetMs;
 
+    const setShowAnnotations = useCallback(
+        (value: boolean) => {
+            setSettings({
+                lyrics: {
+                    ...lyricsSettings,
+                    showAnnotations: value,
+                },
+            });
+        },
+        [lyricsSettings, setSettings],
+    );
+
     const handleOnSearchOverride = useCallback(
         (params: LyricsOverride) => {
             if (!lyricsKey) return;
@@ -316,6 +330,7 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
         isLyricsDisabled,
         lyrics,
         shouldUseExternalTranslation,
+        setShowAnnotations,
         translationApiKey,
         translationApiProvider,
         translationTargetLanguage,
@@ -335,6 +350,7 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
         canFetchExternalTranslation,
         fetchTranslation,
         hasServerAnnotations,
+        setShowAnnotations,
         showAnnotations,
         translatedLyrics,
     ]);
@@ -343,7 +359,6 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
         {
             onCurrentSongChange: () => {
                 setIndexState(0);
-                setShowAnnotations(false);
                 setTranslatedLyrics(null);
             },
         },
@@ -354,16 +369,19 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
         if (
             displayLyrics &&
             !translatedLyrics &&
-            enableAutoTranslation &&
-            shouldUseExternalTranslation
+            shouldUseExternalTranslation &&
+            canFetchExternalTranslation &&
+            (enableAutoTranslation || showAnnotations)
         ) {
             fetchTranslation();
         }
     }, [
+        canFetchExternalTranslation,
         displayLyrics,
         translatedLyrics,
         enableAutoTranslation,
         fetchTranslation,
+        showAnnotations,
         shouldUseExternalTranslation,
     ]);
 
