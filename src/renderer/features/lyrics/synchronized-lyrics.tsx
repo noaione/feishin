@@ -36,6 +36,15 @@ export interface SynchronizedLyricsProps extends Omit<FullLyricsMetadata, 'lyric
     translationLyrics?: null | StructuredSyncedLyric;
 }
 
+function getDistinctAnnotationText(text: null | string | undefined, mainText: string) {
+    if (!text || normalizeLyricText(text) === normalizeLyricText(mainText)) return null;
+    return text;
+}
+
+function normalizeLyricText(text: string) {
+    return text.replaceAll(/\s+/g, ' ').trim();
+}
+
 export const SynchronizedLyrics = ({
     artist,
     lyrics,

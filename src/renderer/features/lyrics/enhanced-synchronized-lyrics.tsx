@@ -179,6 +179,19 @@ function getCueProgress(cue: StructuredLyricCue, currentTimeMs: number) {
     return clamp((currentTimeMs - cue.start) / (effectiveEnd - cue.start));
 }
 
+function getDistinctAnnotationCueLine(
+    annotationLine: StructuredLyricCueLine | undefined,
+    mainLine: StructuredLyricCueLine,
+) {
+    if (!annotationLine || isSameLyricText(annotationLine.value, mainLine.value)) return undefined;
+    return annotationLine;
+}
+
+function getDistinctAnnotationText(text: null | string | undefined, mainText: string) {
+    if (!text || isSameLyricText(text, mainText)) return undefined;
+    return text;
+}
+
 function getLineActiveEnd(line: StructuredLyricCueLine, lineEndByIndex: Map<number, number>) {
     return lineEndByIndex.get(line.index) ?? getLineEnd(line);
 }
@@ -263,8 +276,16 @@ function isLineActive(
     );
 }
 
+function isSameLyricText(a: string, b: string) {
+    return normalizeLyricText(a) === normalizeLyricText(b);
+}
+
 function lineIndexesMatch(a: StructuredLyricCueLine, b: StructuredLyricCueLine) {
     return a.index === b.index;
+}
+
+function normalizeLyricText(text: string) {
+    return text.replaceAll(/\s+/g, ' ').trim();
 }
 
 function splitCueLine(line: StructuredLyricCueLine): CueSegment[] {
@@ -669,16 +690,32 @@ export const EnhancedSynchronizedLyrics = ({
                 const backgroundFontSize = Math.max(12, settings.fontSize * 0.7);
                 const translationCueLine = isBreak
                     ? undefined
-                    : findAnnotationCueLine(translationLyrics, line);
+                    : getDistinctAnnotationCueLine(
+                          findAnnotationCueLine(translationLyrics, line),
+                          line,
+                      );
                 const pronunciationCueLine = isBreak
                     ? undefined
-                    : findAnnotationCueLine(pronunciationLyrics, line);
+                    : getDistinctAnnotationCueLine(
+                          findAnnotationCueLine(pronunciationLyrics, line),
+                          line,
+                      );
                 const translationText = isBreak
                     ? undefined
-                    : getAnnotationText(translationLyrics, line.index, externalTranslationLines);
+                    : getDistinctAnnotationText(
+                          getAnnotationText(
+                              translationLyrics,
+                              line.index,
+                              externalTranslationLines,
+                          ),
+                          line.value,
+                      );
                 const pronunciationText = isBreak
                     ? undefined
-                    : getAnnotationText(pronunciationLyrics, line.index);
+                    : getDistinctAnnotationText(
+                          getAnnotationText(pronunciationLyrics, line.index),
+                          line.value,
+                      );
                 const activeBackgroundLines =
                     isActive && !isBreak
                         ? backgroundCueLines.filter(
