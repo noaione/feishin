@@ -303,7 +303,7 @@ function splitCueLine(line: StructuredLyricCueLine): CueSegment[] {
 
         segments.push({
             cue,
-            text: start < end ? line.value.slice(start, end) : cue.value,
+            text: cue.value || (start < end ? line.value.slice(start, end) : cue.value),
             type: 'cue',
         });
 
@@ -334,6 +334,7 @@ function updateCueProgressNodes(currentTimeMs: number, nodes: HTMLElement[]) {
         }
 
         node.style.setProperty('--cue-progress', progress.toString());
+        node.style.setProperty('--cue-progress-percent', `${progress * 100}%`);
     }
 }
 
@@ -378,6 +379,8 @@ const CueText = ({
                     );
                 }
 
+                const cueProgress = getCueProgress(segment.cue, currentTimeMs);
+
                 return (
                     <span
                         className={styles.cueSpan}
@@ -386,7 +389,8 @@ const CueText = ({
                         key={`${segment.cue.start}-${segment.cue.byteStart}-${idx}`}
                         style={
                             {
-                                '--cue-progress': getCueProgress(segment.cue, currentTimeMs),
+                                '--cue-progress': cueProgress,
+                                '--cue-progress-percent': `${cueProgress * 100}%`,
                             } as React.CSSProperties
                         }
                     >

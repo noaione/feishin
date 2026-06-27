@@ -48,7 +48,9 @@ import {
     FullLyricsMetadata,
     LyricsOverride,
     StructuredLyric,
+    StructuredLyricCueLine,
     StructuredSyncedLyric,
+    SynchronizedLyricsArray,
 } from '/@/shared/types/domain-types';
 
 type LyricsProps = {
@@ -65,9 +67,9 @@ const hasEnhancedCueLine = (
 };
 
 const isStructuredSyncedLyric = (
-    lyric: StructuredLyric | undefined,
+    lyric: FullLyricsMetadata | null | StructuredLyric | undefined,
 ): lyric is StructuredSyncedLyric => {
-    return Boolean(lyric?.synced);
+    return Boolean(lyric && 'synced' in lyric && lyric.synced);
 };
 
 const lineStartsMatch = (a: StructuredSyncedLyric, b: StructuredSyncedLyric) => {
@@ -93,6 +95,62 @@ const findAnnotationLyric = (
         candidates[0] ??
         null
     );
+};
+
+const createGeneratedAnnotationLyric = (
+    selected: FullLyricsMetadata | null | StructuredLyric,
+    generatedLyrics: unknown,
+    kind: 'pronunciation' | 'translation',
+) => {
+    if (!isStructuredSyncedLyric(selected)) return null;
+
+    const generatedLines = typeof generatedLyrics === 'string' ? generatedLyrics.split('\n') : null;
+    const lyrics = generatedLines
+        ? selected.lyrics.map(([time], idx) => [time, generatedLines[idx] ?? ''])
+        : generatedLyrics;
+
+    if (!Array.isArray(lyrics)) return null;
+
+    return {
+        ...selected,
+        cueLine: undefined,
+        kind,
+        lyrics: lyrics as SynchronizedLyricsArray,
+    } satisfies StructuredSyncedLyric;
+};
+
+const createEnhancedFuriganaCueInput = (
+    lyric: FullLyricsMetadata | null | StructuredLyric,
+): null | SynchronizedLyricsArray => {
+    if (!hasEnhancedCueLine(lyric)) return null;
+
+    return (
+        lyric.cueLine?.flatMap((line) =>
+            line.cue.map((cue): [number, string] => [cue.start, cue.value]),
+        ) ?? null
+    );
+};
+
+const getEnhancedFuriganaCueLines = (
+    cueLine: StructuredLyricCueLine[] | undefined,
+    furiganaCueLyrics: unknown,
+) => {
+    if (!cueLine || !Array.isArray(furiganaCueLyrics)) return cueLine;
+
+    let cueIndex = 0;
+
+    return cueLine.map((line) => ({
+        ...line,
+        cue: line.cue.map((cue) => {
+            const value = furiganaCueLyrics[cueIndex]?.[1] ?? cue.value;
+            cueIndex += 1;
+
+            return {
+                ...cue,
+                value,
+            };
+        }),
+    }));
 };
 
 export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' }: LyricsProps) => {
@@ -175,22 +233,41 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
     }, [data, indexToUse, preferLocalLyrics]);
     const localLyrics = data?.local;
 
-    const { data: furiganaConvertedLyrics } = useFuriganaLyrics(
-        lyrics?.lyrics,
-        !!enableFurigana && !hasEnhancedCueLine(lyrics),
+    const isEnhancedLyrics = hasEnhancedCueLine(lyrics);
+    const enhancedFuriganaCueInput = useMemo(
+        () => createEnhancedFuriganaCueInput(lyrics),
+        [lyrics],
     );
-    const { data: romajiConvertedLyrics } = useRomajiLyrics(
-        lyrics?.lyrics,
-        !!enableRomaji && !hasEnhancedCueLine(lyrics),
+    const { data: furiganaConvertedLyrics } = useFuriganaLyrics(lyrics?.lyrics, !!enableFurigana);
+    const { data: enhancedFuriganaCueLyrics } = useFuriganaLyrics(
+        enhancedFuriganaCueInput,
+        !!enableFurigana && isEnhancedLyrics,
     );
+    const { data: romajiConvertedLyrics } = useRomajiLyrics(lyrics?.lyrics, !!enableRomaji);
 
     const displayLyrics = useMemo(() => {
         if (isLyricsDisabled || !lyrics) return null;
-        if (enableFurigana && !hasEnhancedCueLine(lyrics) && furiganaConvertedLyrics) {
+
+        if (enableFurigana && isEnhancedLyrics && enhancedFuriganaCueLyrics) {
+            return {
+                ...lyrics,
+                cueLine: getEnhancedFuriganaCueLines(lyrics.cueLine, enhancedFuriganaCueLyrics),
+            };
+        }
+
+        if (enableFurigana && !isEnhancedLyrics && furiganaConvertedLyrics) {
             return { ...lyrics, lyrics: furiganaConvertedLyrics };
         }
+
         return lyrics;
-    }, [enableFurigana, isLyricsDisabled, lyrics, furiganaConvertedLyrics]);
+    }, [
+        enableFurigana,
+        enhancedFuriganaCueLyrics,
+        furiganaConvertedLyrics,
+        isEnhancedLyrics,
+        isLyricsDisabled,
+        lyrics,
+    ]);
 
     const selectedStructuredLyric = useMemo(() => {
         if (!Array.isArray(localLyrics)) return null;
@@ -207,7 +284,26 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
         [localLyrics, selectedStructuredLyric],
     );
 
+    const generatedPronunciationLyrics = useMemo(() => {
+        if (!isEnhancedLyrics) return null;
+
+        return createGeneratedAnnotationLyric(
+            lyrics,
+            enableRomaji ? romajiConvertedLyrics : null,
+            'pronunciation',
+        );
+    }, [enableRomaji, isEnhancedLyrics, lyrics, romajiConvertedLyrics]);
+
+    const generatedTranslationLyrics = useMemo(() => {
+        if (!isEnhancedLyrics || !translatedLyrics || serverTranslationLyrics) return null;
+
+        return createGeneratedAnnotationLyric(lyrics, translatedLyrics, 'translation');
+    }, [isEnhancedLyrics, lyrics, serverTranslationLyrics, translatedLyrics]);
+
     const hasServerAnnotations = Boolean(serverPronunciationLyrics || serverTranslationLyrics);
+    const hasGeneratedAnnotations = Boolean(
+        generatedPronunciationLyrics || generatedTranslationLyrics,
+    );
     const shouldUseExternalTranslation = !serverTranslationLyrics;
     const canFetchExternalTranslation = Boolean(
         shouldUseExternalTranslation && translationApiProvider && translationApiKey,
@@ -432,7 +528,8 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
         openLyricsSettingsModal(settingsKey);
     };
 
-    const canToggleAnnotations = hasServerAnnotations || canFetchExternalTranslation;
+    const canToggleAnnotations =
+        hasServerAnnotations || hasGeneratedAnnotations || canFetchExternalTranslation;
 
     return (
         <ComponentErrorBoundary>
@@ -476,7 +573,10 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
                                     <EnhancedSynchronizedLyrics
                                         {...(displayLyrics as EnhancedSynchronizedLyricsProps)}
                                         offsetMs={displayOffsetMs}
-                                        pronunciationLyrics={serverPronunciationLyrics}
+                                        pronunciationLyrics={
+                                            serverPronunciationLyrics ??
+                                            generatedPronunciationLyrics
+                                        }
                                         settingsKey={settingsKey}
                                         showAnnotations={showAnnotations}
                                         translatedLyrics={
@@ -484,7 +584,9 @@ export const Lyrics = ({ fadeOutNoLyricsMessage = true, settingsKey = 'default' 
                                                 ? translatedLyrics
                                                 : null
                                         }
-                                        translationLyrics={serverTranslationLyrics}
+                                        translationLyrics={
+                                            serverTranslationLyrics ?? generatedTranslationLyrics
+                                        }
                                     />
                                 ) : synced ? (
                                     <SynchronizedLyrics
