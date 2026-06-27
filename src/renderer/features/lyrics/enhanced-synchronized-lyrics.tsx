@@ -665,7 +665,7 @@ export const EnhancedSynchronizedLyrics = ({
             {primaryCueLines.map((line, idx) => {
                 const isActive = activeIndexes.includes(idx);
                 const isBreak = isBreakCueLine(line);
-                const annotationFontSize = Math.max(12, settings.fontSize * 0.58);
+                const annotationFontSize = Math.max(14, settings.fontSize * 0.72);
                 const backgroundFontSize = Math.max(12, settings.fontSize * 0.7);
                 const translationCueLine = isBreak
                     ? undefined
