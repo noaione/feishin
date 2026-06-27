@@ -163,15 +163,10 @@ function getBreakCueLine(
     };
 }
 
-function getCueProgress(cue: StructuredLyricCue, currentTimeMs: number, fallbackEnd?: number) {
+function getCueProgress(cue: StructuredLyricCue, currentTimeMs: number) {
     if (currentTimeMs < cue.start) return 0;
 
-    const effectiveEnd =
-        cue.end !== undefined && cue.end > cue.start
-            ? cue.end
-            : fallbackEnd !== undefined && fallbackEnd > cue.start
-              ? fallbackEnd
-              : undefined;
+    const effectiveEnd = cue.end !== undefined && cue.end > cue.start ? cue.end : undefined;
 
     if (effectiveEnd === undefined) return 1;
     return clamp((currentTimeMs - cue.start) / (effectiveEnd - cue.start));
@@ -271,7 +266,6 @@ function updateCueProgressNodes(currentTimeMs: number, nodes: HTMLElement[]) {
     for (const node of nodes) {
         const start = Number(node.dataset.cueStart);
         const end = node.dataset.cueEnd ? Number(node.dataset.cueEnd) : undefined;
-        const lineEnd = node.dataset.cueLineEnd ? Number(node.dataset.cueLineEnd) : undefined;
 
         if (!Number.isFinite(start)) continue;
 
@@ -281,13 +275,6 @@ function updateCueProgressNodes(currentTimeMs: number, nodes: HTMLElement[]) {
             progress = getCueProgress(
                 { byteEnd: 0, byteStart: 0, end, start, value: '' },
                 currentTimeMs,
-                lineEnd,
-            );
-        } else if (lineEnd !== undefined && Number.isFinite(lineEnd)) {
-            progress = getCueProgress(
-                { byteEnd: 0, byteStart: 0, start, value: '' },
-                currentTimeMs,
-                lineEnd,
             );
         }
 
@@ -336,16 +323,11 @@ const CueText = ({
                     <span
                         className={styles.cueSpan}
                         data-cue-end={segment.cue.end}
-                        data-cue-line-end={line.end}
                         data-cue-start={segment.cue.start}
                         key={`${segment.cue.start}-${segment.cue.byteStart}-${idx}`}
                         style={
                             {
-                                '--cue-progress': getCueProgress(
-                                    segment.cue,
-                                    currentTimeMs,
-                                    line.end,
-                                ),
+                                '--cue-progress': getCueProgress(segment.cue, currentTimeMs),
                             } as React.CSSProperties
                         }
                     >
